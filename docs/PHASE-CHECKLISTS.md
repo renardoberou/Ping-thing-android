@@ -2,17 +2,17 @@
 
 ## Phase 0 — Bootstrap
 - [x] Repo created with PLAN.md, docs/, web/ping-thing.html
-- [ ] **GATE: owner approves PLAN.md and green-lights Phase 1**
+- [x] **GATE: owner approves PLAN.md and green-lights Phase 1** *(owner: "All phases approved", 2026-06-10)*
 
 ## Phase 1 — Minimum Viable APK
-- [ ] `android/` Gradle project (Kotlin, single Activity, applicationId `com.resonantsystems.pingthing`, minSdk 26, targetSdk 35)
-- [ ] WebViewAssetLoader serving `assets/ping-thing.html` under `https://appassets.androidplatform.net/`
-- [ ] Gradle `copyInstrument` task: `web/ping-thing.html` → assets at build time (assets git-ignored)
-- [ ] WebView config: JS on, DOM storage on, `mediaPlaybackRequiresUserGesture=false`, zoom off
-- [ ] Immersive fullscreen, keep-screen-on, cutout shortEdges, portrait lock, double-back-to-exit
-- [ ] Lifecycle suspend/resume of AudioContext
-- [ ] Adaptive icon (generated once in CI, committed)
-- [ ] `.github/workflows/build.yml` → debug APK artifact on push
+- [x] `android/` Gradle project (Kotlin, single Activity, applicationId `com.resonantsystems.pingthing`, minSdk 26, targetSdk 35)
+- [x] WebViewAssetLoader serving `assets/ping-thing.html` under `https://appassets.androidplatform.net/`
+- [x] Gradle `copyInstrument` task: `web/ping-thing.html` → assets at build time (assets git-ignored)
+- [x] WebView config: JS on, DOM storage on, `mediaPlaybackRequiresUserGesture=false`, zoom off
+- [x] Immersive fullscreen, keep-screen-on, cutout shortEdges (values-v27), portrait lock, double-back-to-exit
+- [x] Lifecycle suspend/resume of AudioContext
+- [x] Adaptive icon (pure-XML vector + anydpi-v26 — minSdk 26 makes legacy PNGs unnecessary)
+- [x] `.github/workflows/build.yml` → debug APK artifact on push
 - [ ] **Owner device matrix (PLAN §4.5, 9 items) all pass** — REC item may be waived with logged issue
 - [ ] **GATE: owner states "Phase 1 accepted"**
 
@@ -43,3 +43,4 @@
 *(append entries here on handoff: date — agent — what was done — what is verified — exact next action)*
 
 - 2026-06-10 — consulting agent — Phase 0 documents authored; repo content staged for creation. Next action: owner creates repo / provides PAT; then owner reviews PLAN.md and closes Phase 0 gate.
+- 2026-06-10 — consulting agent — Phase 0 gate closed (owner approved all phases). Phase 1 implemented in full per PLAN §4: Android shell (Kotlin, plain Activity, WebViewAssetLoader, AGP 8.6.1 / Gradle 8.9 / Kotlin 2.0.20, sole dep androidx.webkit:1.11.0), pure-XML adaptive icon, copyInstrument asset pipeline, build.yml CI. All XML validated. **Verified next action: owner opens Actions tab → waits for green run → downloads `ping-thing-debug-apk` artifact → extracts zip → installs APK → runs the 9-point device matrix from PLAN §4.5 and reports results here.**
