@@ -1,19 +1,29 @@
 package com.resonantsystems.pingthing
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -27,22 +37,49 @@ import androidx.webkit.WebViewAssetLoader
 import java.io.File
 
 /**
- * The Ping Thing — thin native shell (Phase 1 + crash-visibility hotfix).
+ * The Ping Thing — native shell, Phase 2.
  *
- * The launch crash reported on the owner device is captured here instead of
- * dying silently: any Throwable during init — and any uncaught exception
- * later — is written to files/crash.txt and rendered full-screen with a COPY
- * button on this or the next launch. Once the real cause is fixed and
- * verified, this scaffolding stays (it is harmless and tiny).
+ * Crash-visibility scaffolding (permanent): any Throwable during init, and any
+ * uncaught exception later, lands in files/crash.txt and is rendered full-screen
+ * with a COPY button instead of "keeps stopping".
+ *
+ * Phase 2 (PLAN §5): AndroidHost JS bridge (feature-detected by the HTML; inert
+ * in browsers), audio focus (suspend on loss — an instrument ducking sounds
+ * wrong), BACKGROUND AUDIO via mediaPlayback foreground service, haptic taps.
  */
 class MainActivity : Activity() {
 
     private var webView: WebView? = null
     private var backPressedAt = 0L
 
+    private lateinit var audioManager: AudioManager
+    private var focusRequest: AudioFocusRequest? = null
+
+    /** True while the in-app BACKGROUND AUDIO toggle is on. */
+    @Volatile
+    var bgAudio = false
+        private set
+
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_GAIN ->
+                evalJs("if(window.ctx)ctx.resume();")
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                evalJs("if(window.ctx)ctx.suspend();")
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                evalJs("if(window.ctx)ctx.suspend();if(window._setBgAudioUI)_setBgAudioUI(false);")
+                if (bgAudio) setBackgroundAudioInternal(false)
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        active = this
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        volumeControlStream = AudioManager.STREAM_MUSIC
 
         // 1) From this line on, no crash is ever silent.
         installCrashHandler()
@@ -71,8 +108,6 @@ class MainActivity : Activity() {
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
-        // WebView construction is the classic instant-crash site when the
-        // System WebView provider is disabled or mid-update — now visible.
         val wv = WebView(this)
         webView = wv
         wv.settings.javaScriptEnabled = true
@@ -86,14 +121,97 @@ class MainActivity : Activity() {
                 request: WebResourceRequest
             ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
         }
+        wv.addJavascriptInterface(AndroidHostBridge(), "AndroidHost")
 
         setContentView(wv)
-        // Immersive AFTER the decor has content — ordering hygiene.
         hideSystemBars()
         wv.loadUrl("https://appassets.androidplatform.net/assets/ping-thing.html")
     }
 
-    // ── Crash visibility ─────────────────────────────────────────────
+    // ── AndroidHost JS bridge ─────────────────────────────────────────
+
+    inner class AndroidHostBridge {
+
+        @JavascriptInterface
+        fun onAudioStarted() {
+            runOnUiThread { requestAudioFocus() }
+        }
+
+        @JavascriptInterface
+        fun keepAwake(on: Boolean) {
+            runOnUiThread {
+                if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+
+        @JavascriptInterface
+        fun hapticTap(ms: Int) {
+            val dur = ms.coerceIn(1, 80).toLong()
+            val vib = if (Build.VERSION.SDK_INT >= 31) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager)
+                    .defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            vib.vibrate(VibrationEffect.createOneShot(dur, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+
+        @Suppress("DEPRECATION")
+        @JavascriptInterface
+        fun getAppVersion(): String =
+            try { packageManager.getPackageInfo(packageName, 0).versionName ?: "?" }
+            catch (e: Exception) { "?" }
+
+        @JavascriptInterface
+        fun setBackgroundAudio(on: Boolean) {
+            runOnUiThread { setBackgroundAudioInternal(on) }
+        }
+    }
+
+    private fun requestAudioFocus() {
+        if (focusRequest != null) return
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener(focusListener)
+            .build()
+        focusRequest = req
+        audioManager.requestAudioFocus(req)
+    }
+
+    private fun setBackgroundAudioInternal(on: Boolean) {
+        bgAudio = on
+        if (on) {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7)
+            }
+            startForegroundService(Intent(this, PlaybackService::class.java))
+        } else {
+            stopService(Intent(this, PlaybackService::class.java))
+        }
+    }
+
+    /** Called by PlaybackService when the notification STOP action fires. */
+    fun stopBackgroundAudioFromNotification() {
+        runOnUiThread {
+            bgAudio = false
+            evalJs("if(window.ctx)ctx.suspend();if(window._setBgAudioUI)_setBgAudioUI(false);")
+        }
+    }
+
+    private fun evalJs(js: String) {
+        runOnUiThread { webView?.evaluateJavascript(js, null) }
+    }
+
+    // ── Crash visibility (permanent scaffolding) ─────────────────────
 
     private fun crashFile() = File(filesDir, "crash.txt")
 
@@ -148,7 +266,7 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(column) })
     }
 
-    // ── Phase 1 behaviour, unchanged below ───────────────────────────
+    // ── System chrome & lifecycle ─────────────────────────────────────
 
     private fun hideSystemBars() {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -178,9 +296,13 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        webView?.let {
-            it.evaluateJavascript("if(window.ctx)ctx.suspend();", null)
-            it.onPause()
+        // With BACKGROUND AUDIO on we deliberately keep the WebView fully alive:
+        // pausing it would throttle the JS scheduler the service exists to protect.
+        if (!bgAudio) {
+            webView?.let {
+                it.evaluateJavascript("if(window.ctx)ctx.suspend();", null)
+                it.onPause()
+            }
         }
     }
 
@@ -188,11 +310,14 @@ class MainActivity : Activity() {
         super.onResume()
         webView?.let {
             it.onResume()
-            it.evaluateJavascript("if(window.ctx)ctx.resume();", null)
+            if (!bgAudio) it.evaluateJavascript("if(window.ctx)ctx.resume();", null)
         }
     }
 
     override fun onDestroy() {
+        active = null
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        stopService(Intent(this, PlaybackService::class.java))
         webView?.destroy()
         super.onDestroy()
     }
@@ -207,5 +332,11 @@ class MainActivity : Activity() {
             backPressedAt = now
             Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    companion object {
+        /** Handle for PlaybackService's notification STOP action. */
+        @JvmStatic
+        var active: MainActivity? = null
     }
 }
