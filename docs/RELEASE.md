@@ -22,8 +22,23 @@ Then in the GitHub repo → Settings → Secrets and variables → Actions, crea
 
 Back up `pingthing-release.jks` (NOT the .b64 in cleartext anywhere public): private cloud drive + one additional location. Delete `keystore.b64` after pasting.
 
-## 2. Create the keystore — Path B: one-shot CI workflow (fallback)
-`generate-keystore.yml` (manual `workflow_dispatch` only) runs `keytool` with passwords supplied as **workflow inputs** (inputs are not logged), uploads `pingthing-release.jks` as a **private artifact** (90-day retention; never echoed to logs). Owner downloads the artifact on the phone, produces base64 in Termux (`base64 -w0 …`), sets the four secrets, **then deletes the workflow file in the same PR** that records "secrets configured" in PHASE-CHECKLISTS.
+## 2. ~~Path B: one-shot CI workflow~~ — RETIRED (security)
+
+The originally-planned CI keystore generator is **unsafe on a public repository**
+and must not be built: `workflow_dispatch` inputs are visible on the run page to
+anyone, and artifacts on public repos are downloadable by any logged-in user
+while retention lasts. A signing keystore must never transit either channel.
+Path A (Termux) is the supported phone-only procedure.
+
+## 2b. Path C: agent-assisted secret setup (optional convenience)
+
+After generating the keystore in Termux (Path A), instead of typing four secrets
+into the GitHub web UI you may hand them to the build agent in conversation and
+have it set them via the API. Requirements: the fine-grained PAT needs
+**Secrets: Read and write** on this repository. Trade-off to understand: the
+keystore base64 and passwords then exist in the conversation transcript — for a
+self-published instrument app this is usually acceptable, but it is your call.
+Path A + manual web entry remains the most private option.
 
 ## 3. Releasing
 1. Confirm CI green on `main`.
