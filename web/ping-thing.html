@@ -106,6 +106,16 @@ body{
 }
 #pingCanvas.drag-mode{cursor:grabbing}
 
+/* ── STAGE MODE — radar-only view for TV mirroring ── */
+#stageExit{display:none;position:fixed;top:10px;right:10px;z-index:300;
+  padding:5px 10px;border-radius:4px;cursor:pointer;
+  border:1px solid rgba(0,220,100,.35);background:rgba(9,8,7,.72);
+  color:rgba(0,220,100,.6);font-family:'Share Tech Mono',monospace;
+  font-size:8px;letter-spacing:2px}
+body.stage-mode #stageExit{display:block}
+body.stage-mode .below,body.stage-mode .midi-strip{display:none!important}
+body.stage-mode #pingCanvas{max-height:100vh;height:100vh}
+
 /* ── CONTROLS ── */
 .below{
   width:100%;flex-shrink:0;
@@ -574,6 +584,7 @@ body.nuke-shaking{animation:nukeShake 0.55s ease-out forwards;}
 </div>
 
 <canvas id="pingCanvas" width="500" height="500"></canvas>
+<button id="stageExit">EXIT STAGE</button>
 
 <div class="below">
 
@@ -631,6 +642,7 @@ body.nuke-shaking{animation:nukeShake 0.55s ease-out forwards;}
     <button class="util-btn" id="recordBtn" data-tip="Record audio output">REC</button>
     <button class="util-btn" id="shareBtn" data-tip="Copy shareable URL">SHARE</button>
     <button class="util-btn" id="lqBtn" data-tip="Toggle low-CPU mode">LQ</button>
+    <button class="util-btn" id="stageBtn" data-tip="Radar-only view for TV mirroring">STAGE</button>
     <button class="install-btn" id="installBtn" data-tip="Install as PWA app">+APP</button>
     <button class="util-btn" id="saveBtn" data-tip="Export session JSON">↓ SAVE</button>
     <label class="util-btn" id="loadLabel" data-tip="Import session JSON">↑ LOAD<input type="file" id="loadInput" accept=".json" style="display:none"></label>
@@ -1109,6 +1121,8 @@ function initAudio(){
   initNoisePools();
   const dry=ctx.createGain();dry.gain.value=.70; // was 0.55 — raised +2.1 dB as part of gain staging fix
   fxBus.connect(dry);dry.connect(masterG);
+  // AndroidHost bridge (native app only; feature-detected, inert in browsers)
+  if(window.AndroidHost&&AndroidHost.onAudioStarted)try{AndroidHost.onAudioStarted()}catch(e){}
 }
 function buildTanh(d){const n=512,c=new Float32Array(n);for(let i=0;i<n;i++){const x=i*2/(n-1)-1;c[i]=Math.tanh(x*d)/Math.tanh(d);}return c;}
 // ══ 6-BAND PARAMETRIC EQ — Analog channel strip model ══════════
@@ -2119,15 +2133,19 @@ function getStepSec(stepIdx){
 function scheduleAudio(){
   if(!seqPlay||!ctx)return;
   const now=ctx.currentTime;
+  // Background-throttle resilience: hidden pages get setTimeout clamped to ~1s,
+  // so widen the lookahead window; already-queued Web Audio events bridge the gap.
+  const _hidden=typeof document!=='undefined'&&document.hidden;
+  const AHEAD=_hidden?2.5:SCHEDULE_AHEAD;
   // Queue all steps whose time falls within the lookahead window
-  while(nextStepTime<now+SCHEDULE_AHEAD){
+  while(nextStepTime<now+AHEAD){
     const stepIdx=seqAudioStep;
     fireStepAt(stepIdx,nextStepTime);
     // Advance to next step
     seqAudioStep=(seqAudioStep+1)%N;
     nextStepTime+=getStepSec(seqAudioStep);
   }
-  schedWakeTimer=setTimeout(scheduleAudio,SCHEDULE_INTERVAL);
+  schedWakeTimer=setTimeout(scheduleAudio,_hidden?500:SCHEDULE_INTERVAL);
 }
 
 // ══ EUCLIDEAN HIHAT SYSTEM ═══════════════════════════════════════
@@ -3138,6 +3156,7 @@ const _bombBtn=document.getElementById('bombBtn');
 
 function _bombDown(){
   initAudio();
+  if(window.AndroidHost&&AndroidHost.hapticTap)try{AndroidHost.hapticTap(15)}catch(e){}
   // Capture the step the user sees RIGHT NOW — used as anchor in _bombUp
   _bombDownStep=seqPlay&&seqPlayStep>=0?seqPlayStep:0;
   // Fire kick immediately on press — zero audio lag
@@ -3219,6 +3238,7 @@ function _updateFireUI(){
 
   function _fireDown(){
     initAudio();
+    if(window.AndroidHost&&AndroidHost.hapticTap)try{AndroidHost.hapticTap(10)}catch(e){}
     _fireLongTimer=setTimeout(()=>{
       _fireLongTimer=null;
       if(_hatTapActive||hatTapMode){
@@ -3274,6 +3294,33 @@ function _updateFireUI(){
 })();
 
 renderPresetList();
+
+// ── STAGE MODE — radar-only view for TV mirroring ─────────────────
+(function(){
+  const sb=document.getElementById('stageBtn'),se=document.getElementById('stageExit');
+  if(!sb||!se)return;
+  sb.addEventListener('click',()=>document.body.classList.add('stage-mode'));
+  se.addEventListener('click',()=>document.body.classList.remove('stage-mode'));
+})();
+
+// ── ANDROIDHOST GLUE — native app only; feature-detected, inert in browsers ──
+(function(){
+  if(!(window.AndroidHost&&AndroidHost.setBackgroundAudio))return;
+  let _bgOn=false;
+  const b=document.createElement('button');
+  b.className='util-btn';b.id='bgAudioBtn';b.textContent='BG AUDIO';
+  b.setAttribute('data-tip','Keep audio running with screen off');
+  window._setBgAudioUI=function(on){_bgOn=!!on;
+    b.style.color=_bgOn?'#00DD88':'';
+    b.style.borderColor=_bgOn?'rgba(0,220,136,0.7)':'';};
+  b.addEventListener('click',()=>{
+    const next=!_bgOn;
+    try{AndroidHost.setBackgroundAudio(next)}catch(e){}
+    window._setBgAudioUI(next);
+  });
+  const bar=document.querySelector('.util-bar');
+  if(bar)bar.appendChild(b);
+})();
 
 // ── iOS AUDIO UNLOCK ─────────────────────────────────────────────
 (function(){
