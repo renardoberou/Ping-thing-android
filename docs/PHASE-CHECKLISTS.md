@@ -13,8 +13,8 @@
 - [x] Lifecycle suspend/resume of AudioContext
 - [x] Adaptive icon (pure-XML vector + anydpi-v26 — minSdk 26 makes legacy PNGs unnecessary)
 - [x] `.github/workflows/build.yml` → debug APK artifact on push
-- [ ] **Owner device matrix (PLAN §4.5, 9 items) all pass** — REC item may be waived with logged issue
-- [ ] **GATE: owner states "Phase 1 accepted"**
+- [x] **Owner device matrix** — owner confirms app "opens and works perfectly" (2026-06-10); individual items not itemised; REC status unverified (logged, Phase 4 fallback specced)
+- [x] **GATE: owner states "Phase 1 accepted"** *(owner: "I installed the app, it opens and works perfectly. Proceed with phase 2.", 2026-06-10)*
   - REGRESSION 2026-06-10: instant launch crash on owner device. Hotfix build adds
     on-screen crash capture (files/crash.txt rendered full-screen with COPY button),
     a guard around WebView construction (System-WebView-unavailable is a classic
@@ -22,11 +22,11 @@
     Phase 2 work stashed per owner instruction until this gate closes.
 
 ## Phase 2 — Native integration
-- [ ] JS bridge `AndroidHost` (feature-detected in HTML; additive `web:` commit)
-- [ ] Audio focus request/loss/regain wired to ctx.suspend/resume
-- [ ] Foreground service (mediaPlayback) behind in-app "BACKGROUND AUDIO" toggle, with notification controls
-- [ ] Haptic tap bridge for BOMB/FIRE
-- [ ] Stage Mode (radar-only fullscreen view for TV mirroring)
+- [x] JS bridge `AndroidHost` (feature-detected in HTML; additive `web:` commit)
+- [x] Audio focus request/loss/regain wired to ctx.suspend/resume
+- [x] Foreground service (mediaPlayback) behind in-app "BACKGROUND AUDIO" toggle, with STOP notification action
+- [x] Haptic tap bridge for BOMB/FIRE
+- [x] Stage Mode (radar-only fullscreen view for TV mirroring; works in browsers too)
 - [ ] **GATE: 10-min screen-off soak, no scheduler drift; focus check vs a music app**
 
 ## Phase 3 — Release
@@ -50,3 +50,4 @@
 - 2026-06-10 — consulting agent — Phase 0 documents authored; repo content staged for creation. Next action: owner creates repo / provides PAT; then owner reviews PLAN.md and closes Phase 0 gate.
 - 2026-06-10 — consulting agent — Phase 0 gate closed (owner approved all phases). Phase 1 implemented in full per PLAN §4: Android shell (Kotlin, plain Activity, WebViewAssetLoader, AGP 8.6.1 / Gradle 8.9 / Kotlin 2.0.20, sole dep androidx.webkit:1.11.0), pure-XML adaptive icon, copyInstrument asset pipeline, build.yml CI. All XML validated. **Verified next action: owner opens Actions tab → waits for green run → downloads `ping-thing-debug-apk` artifact → extracts zip → installs APK → runs the 9-point device matrix from PLAN §4.5 and reports results here.**
 - 2026-06-10 — consulting agent — Launch crash reported on owner device ("Ping Thing keeps stopping"); instrument HTML independently verified fine (Hermes/Termux), so fault is in the Kotlin shell. Phase 2 WIP stashed (git stash: "phase2-wip"). Shipped fix build: crash handler + full-screen trace viewer with COPY, WebView-construction guard, immersive-after-setContentView. Architecture question raised by owner answered in conversation: HTML is bundled in-APK (offline, no hosting); appassets.androidplatform.net is a virtual local origin, not the web. Next action: owner installs new artifact — either it launches clean, or it now SHOWS the stack trace; owner sends trace/screenshot back.
+- 2026-06-10 — consulting agent — Phase 1 gate closed by owner. Phase 2 implemented: merged MainActivity (crash scaffolding kept + AndroidHost bridge + audio focus + conditional lifecycle), PlaybackService (mediaPlayback FGS, STOP action), manifest permissions, and sanctioned `web:` changes (bridge glue, BG AUDIO injected toggle, adaptive scheduler lookahead 2.5s/500ms when hidden, haptics, Stage Mode). Next action: owner installs new artifact and runs the Phase 2 gate — BG AUDIO on, screen off 10 min, audio must continue without drift; then focus check vs a music app.
