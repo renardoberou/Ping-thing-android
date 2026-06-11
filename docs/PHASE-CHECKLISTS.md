@@ -15,6 +15,11 @@
 - [x] `.github/workflows/build.yml` → debug APK artifact on push
 - [ ] **Owner device matrix (PLAN §4.5, 9 items) all pass** — REC item may be waived with logged issue
 - [ ] **GATE: owner states "Phase 1 accepted"**
+  - REGRESSION 2026-06-10: instant launch crash on owner device. Hotfix build adds
+    on-screen crash capture (files/crash.txt rendered full-screen with COPY button),
+    a guard around WebView construction (System-WebView-unavailable is a classic
+    silent instant-crash), and init-order hygiene (setContentView before immersive).
+    Phase 2 work stashed per owner instruction until this gate closes.
 
 ## Phase 2 — Native integration
 - [ ] JS bridge `AndroidHost` (feature-detected in HTML; additive `web:` commit)
@@ -44,3 +49,4 @@
 
 - 2026-06-10 — consulting agent — Phase 0 documents authored; repo content staged for creation. Next action: owner creates repo / provides PAT; then owner reviews PLAN.md and closes Phase 0 gate.
 - 2026-06-10 — consulting agent — Phase 0 gate closed (owner approved all phases). Phase 1 implemented in full per PLAN §4: Android shell (Kotlin, plain Activity, WebViewAssetLoader, AGP 8.6.1 / Gradle 8.9 / Kotlin 2.0.20, sole dep androidx.webkit:1.11.0), pure-XML adaptive icon, copyInstrument asset pipeline, build.yml CI. All XML validated. **Verified next action: owner opens Actions tab → waits for green run → downloads `ping-thing-debug-apk` artifact → extracts zip → installs APK → runs the 9-point device matrix from PLAN §4.5 and reports results here.**
+- 2026-06-10 — consulting agent — Launch crash reported on owner device ("Ping Thing keeps stopping"); instrument HTML independently verified fine (Hermes/Termux), so fault is in the Kotlin shell. Phase 2 WIP stashed (git stash: "phase2-wip"). Shipped fix build: crash handler + full-screen trace viewer with COPY, WebView-construction guard, immersive-after-setContentView. Architecture question raised by owner answered in conversation: HTML is bundled in-APK (offline, no hosting); appassets.androidplatform.net is a virtual local origin, not the web. Next action: owner installs new artifact — either it launches clean, or it now SHOWS the stack trace; owner sends trace/screenshot back.
