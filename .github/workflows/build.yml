@@ -6,7 +6,24 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  safety-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for committed secrets or release binaries
+        run: |
+          if git grep -n -i -E 'ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|-----BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY-----' -- . ; then
+            echo "::error::Possible credential material found in a tracked file — see matches above. Never commit tokens/keys."
+            exit 1
+          fi
+          if git ls-files | grep -E '\.(jks|keystore|apk|aab)$'; then
+            echo "::error::A binary release artifact is tracked in git — keystores/APKs/AABs must never be committed."
+            exit 1
+          fi
+          echo "Secret/binary scan clean."
+
   debug-apk:
+    needs: safety-scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

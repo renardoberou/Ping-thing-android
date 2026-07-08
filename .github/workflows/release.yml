@@ -49,10 +49,27 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk "ping-thing-${GITHUB_REF_NAME}.apk"
           cp android/app/build/outputs/bundle/release/app-release.aab "ping-thing-${GITHUB_REF_NAME}.aab"
 
+      - name: Verify signature and generate checksums
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          APKSIGNER=$(find "$SDK_ROOT/build-tools" -maxdepth 2 -name apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $SDK_ROOT/build-tools — cannot verify the release signature."
+            exit 1
+          fi
+          echo "Using $APKSIGNER"
+          "$APKSIGNER" verify --verbose "ping-thing-${GITHUB_REF_NAME}.apk"
+          sha256sum ping-thing-*.apk ping-thing-*.aab | tee CHECKSUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             ping-thing-*.apk
             ping-thing-*.aab
+            CHECKSUMS.txt
+          body: |
+            Signed release. Verify the APK signature yourself before installing:
+            `apksigner verify --verbose ping-thing-*.apk` — matches the check this
+            workflow already ran. SHA-256 checksums are in `CHECKSUMS.txt`.
           generate_release_notes: true
           fail_on_unmatched_files: true
