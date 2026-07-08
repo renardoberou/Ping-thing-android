@@ -1,90 +1,65 @@
-# RELEASE.md — signing & release runbook (no computer required)
+# RELEASE.md — signing & release runbook
 
-> **The keystore is the crown jewel.** Lose it and no future update can ever be installed over a released build (and a Play listing would be permanently orphaned). Back it up before the first release. Two copies minimum, one off-device.
+> **The keystore is the crown jewel.** Lose it and no future update can be installed over the released build. Keep at least two private backups, one off-device. Never commit the keystore, passwords, `.env` files, APKs, AABs, or logs.
 
-## 0. Pre-flight safety check (run before every tag)
+## Current signed release status
 
-Every push to `main` already runs an automated `safety-scan` job (`.github/workflows/build.yml`) that fails the build if it finds token-shaped strings or a tracked `.jks`/`.apk`/`.aab`. Before cutting a release tag specifically, it's worth running the same check yourself on a fresh clone, since a bad tag is harder to walk back than a bad commit:
+- Release tag: `v9.3.0`
+- Release URL: https://github.com/renardoberou/Ping-thing-android/releases/tag/v9.3.0
+- Artifacts: signed APK, AAB, and `CHECKSUMS.txt`
+- Verification: release workflow ran APK signing verification before publishing artifacts
+- Owner status: keystore backed up off-device; signed APK installed on owner device; app works as expected
+
+## Before every future release tag
+
+Run a clean safety check on a fresh clone before tagging:
 
 ```bash
-git clone --depth 1 https://github.com/renardoberou/Ping-thing-android.git && cd Ping-thing-android
+git clone --depth 1 https://github.com/renardoberou/Ping-thing-android.git
+cd Ping-thing-android
 git grep -n -i -E 'api[_-]?key|secret|token|password|ghp_|github_pat_' HEAD || echo "clean"
 git grep -n -E '\.(jks|keystore|apk|aab)$' HEAD || echo "clean"
 ```
-Expected: only this document's own placeholder names, never a real secret value or a tracked binary.
 
-## 1. Create the keystore — Path A: Termux (preferred)
+Expected: no real secret values and no tracked binary release artifacts.
 
-```bash
-pkg update && pkg install openjdk-17
-keytool -genkeypair -v \
-  -keystore pingthing-release.jks \
-  -alias pingthing \
-  -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=Resonant Systems, O=Resonant Systems"
-# choose a strong store password; use the SAME password for the key when asked (simplifies CI)
-base64 -w0 pingthing-release.jks > keystore.b64
-```
-Then in the GitHub repo → Settings → Secrets and variables → Actions, create:
-- `KEYSTORE_B64` — contents of `keystore.b64`
-- `KEYSTORE_PASS` — the store password
-- `KEY_ALIAS` — `pingthing`
-- `KEY_PASS` — the key password (same as store if you followed above)
+## Keystore procedure
 
-**Convenience alternative to the web UI:** if `gh` (GitHub CLI) is installed in Termux (`pkg install gh`, then `gh auth login` — supports a browser device-code flow, no token needed by hand), the same four secrets can be set from the same shell without leaving Termux:
-```bash
-gh secret set KEYSTORE_B64 --repo renardoberou/Ping-thing-android < keystore.b64
-gh secret set KEYSTORE_PASS --repo renardoberou/Ping-thing-android
-gh secret set KEY_ALIAS --repo renardoberou/Ping-thing-android --body "pingthing"
-gh secret set KEY_PASS --repo renardoberou/Ping-thing-android
-gh secret list --repo renardoberou/Ping-thing-android   # confirms names only, never values
-```
+The release keystore is generated locally by the owner, backed up privately, and exposed to GitHub Actions only through repository secrets. Do not regenerate it for ordinary updates. Regenerating changes the app signature and can break update continuity.
 
-Back up `pingthing-release.jks` (NOT the .b64 in cleartext anywhere public): private cloud drive + one additional location. Delete `keystore.b64` after pasting.
+Required repository secrets for release workflow:
 
-## 2. ~~Path B: one-shot CI workflow~~ — RETIRED (security)
+- `KEYSTORE_B64`
+- `KEYSTORE_PASS`
+- `KEY_ALIAS`
+- `KEY_PASS`
 
-The originally-planned CI keystore generator is **unsafe on a public repository**
-and must not be built: `workflow_dispatch` inputs are visible on the run page to
-anyone, and artifacts on public repos are downloadable by any logged-in user
-while retention lasts. A signing keystore must never transit either channel.
-Path A (Termux) is the supported phone-only procedure.
+Do not write the secret values into this repo, issues, logs, README files, screenshots, or release notes.
 
-## 2b. Path C: agent-assisted secret setup (optional convenience)
+## Releasing
 
-After generating the keystore in Termux (Path A), instead of typing four secrets
-into the GitHub web UI you may hand them to the build agent in conversation and
-have it set them via the API. Requirements: the fine-grained PAT needs
-**Secrets: Read and write** on this repository. Trade-off to understand: the
-keystore base64 and passwords then exist in the conversation transcript — for a
-self-published instrument app this is usually acceptable, but it is your call.
-Path A + manual web entry remains the most private option.
-
-## 3. Releasing
 1. Confirm CI green on `main`.
-2. Bump `versionName` if needed (semver mirrors instrument version, e.g. `9.3.0`).
-3. Create tag `v9.3.0` via GitHub web UI (Releases → Draft new release → new tag on main).
-4. `release.yml` triggers: decodes `KEYSTORE_B64`, runs `assembleRelease` + `bundleRelease`, verifies the resulting APK with `apksigner verify`, generates `CHECKSUMS.txt` (SHA-256 of both artifacts), and attaches all three files to the Release. If `apksigner` can't be located on the runner or verification fails, the workflow fails loudly rather than shipping an unverified build.
-5. Install the APK from the Release page on the owner device; run a 5-minute sanity set. Optionally re-verify locally against `CHECKSUMS.txt` (`sha256sum -c CHECKSUMS.txt`) before installing on a second device.
+2. Bump `versionName` if needed.
+3. Create a new `v*` tag on `main`.
+4. `release.yml` builds signed APK + AAB, verifies the APK with `apksigner`, generates `CHECKSUMS.txt`, and attaches artifacts to the GitHub Release.
+5. Install the APK from the Release page on the owner device and run a sanity set.
+6. Update `docs/PHASE-CHECKLISTS.md` and README if release status changes.
 
-`versionCode` is `github.run_number` — strictly increasing, no manual bookkeeping.
+`versionCode` is derived from the GitHub Actions run number and is strictly increasing.
 
-## 4. Upgrade-path note (debug → release)
-Debug and release builds have different signatures: Android treats them as different apps for data purposes, so installing release over a long-used debug build requires uninstall → presets would be lost. **Before first release:** export the preset bank (in-app ↓ EXPORT) and re-import after. From the first signed release onward, all updates preserve data.
+## Upgrade-path note
 
-## 5. Play Store (when/if owner decides)
-- **Signing key model:** the same private key generated in §1 can serve as the Play upload key (Play App Signing then re-signs for distribution automatically) — no separate keystore needed unless the owner later wants distinct upload-vs-distribution keys. See https://support.google.com/googleplay/android-developer/answer/9842756.
-- **New personal developer accounts** are subject to a closed-testing gate before production access: **12 opted-in testers for 14 continuous days**. Plan the GitHub-Release APK phase to double as that test pool if going to Play. See https://support.google.com/googleplay/android-developer/answer/14151465.
-- Privacy policy: static page in this repo via GitHub Pages ("The Ping Thing stores all data locally on your device and transmits nothing." — expand to the standard 5 short sections).
-- Data safety form: only claim "no data collected" once actually verified true for the shipped build (WebView + localStorage only, no network calls beyond optional Google Fonts) — see §5a below.
-- Content rating questionnaire: trivial (no UGC, no ads, no data).
-- Assets needed: 2–8 phone screenshots (captured on device), 1024×500 feature graphic (can be generated from brand assets in a CI ImageMagick job), 512×512 icon (already produced in Phase 1).
-- Target API: 35 already satisfies current Play policy (https://support.google.com/googleplay/android-developer/answer/11926878).
-- Upload `.aab` (not `.apk`) to Play; the release workflow already produces both.
+Debug and release builds have different signatures. Android treats them as separate update paths. Before switching from a debug build to a signed release build, export the preset bank in-app and re-import after installing the signed build. From the first signed release onward, signed updates should preserve app data.
 
-## 5a. Reference links
-- Android app signing: https://developer.android.com/studio/publish/app-signing
-- Android App Bundles: https://developer.android.com/guide/app-bundle
-- `apksigner`: https://developer.android.com/studio/command-line/apksigner
-- Android versioning: https://developer.android.com/studio/publish/versioning
-- Play store listing assets: https://support.google.com/googleplay/android-developer/answer/1078870
+## Privacy policy
+
+Draft/page in this repo: [`privacy.html`](../privacy.html).
+
+Before Play Store submission, publish that page at a stable URL and add it to the store listing. Current privacy summary: the app does not require an account and does not intentionally collect or transmit personal data. It uses local storage for presets/settings, vibration for haptics, notifications/foreground service for background audio, and internet permission for bundled-web compatibility/fonts.
+
+## Play Store notes
+
+- Upload the `.aab`, not the `.apk`, to Play.
+- Keep the same signing identity / Play App Signing strategy coherent across updates.
+- New personal developer accounts may be subject to closed testing requirements before production access.
+- Store assets still needed: phone screenshots, 1024×500 feature graphic, 512×512 icon, content rating, target audience declaration, data safety form.
