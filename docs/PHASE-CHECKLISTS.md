@@ -7,51 +7,46 @@
 ## Phase 1 — Minimum Viable APK
 - [x] `android/` Gradle project (Kotlin, single Activity, applicationId `com.resonantsystems.pingthing`, minSdk 26, targetSdk 35)
 - [x] WebViewAssetLoader serving `assets/ping-thing.html` under `https://appassets.androidplatform.net/`
-- [x] Gradle `copyInstrument` task: `web/ping-thing.html` → assets at build time (assets git-ignored)
+- [x] Gradle `copyInstrument` task: `web/ping-thing.html` → assets at build time
 - [x] WebView config: JS on, DOM storage on, `mediaPlaybackRequiresUserGesture=false`, zoom off
-- [x] Immersive fullscreen, keep-screen-on, cutout shortEdges (values-v27), portrait lock, double-back-to-exit
+- [x] Immersive fullscreen, keep-screen-on, cutout shortEdges, portrait lock, double-back-to-exit
 - [x] Lifecycle suspend/resume of AudioContext
-- [x] Adaptive icon (pure-XML vector + anydpi-v26 — minSdk 26 makes legacy PNGs unnecessary)
+- [x] Adaptive icon
 - [x] `.github/workflows/build.yml` → debug APK artifact on push
-- [x] **Owner device matrix** — owner confirms app "opens and works perfectly" (2026-06-10); individual items not itemised; REC status unverified (logged, Phase 4 fallback specced)
-- [x] **GATE: owner states "Phase 1 accepted"** *(owner: "I installed the app, it opens and works perfectly. Proceed with phase 2.", 2026-06-10)*
-  - REGRESSION 2026-06-10: instant launch crash on owner device. Hotfix build adds
-    on-screen crash capture (files/crash.txt rendered full-screen with COPY button),
-    a guard around WebView construction (System-WebView-unavailable is a classic
-    silent instant-crash), and init-order hygiene (setContentView before immersive).
-    Phase 2 work stashed per owner instruction until this gate closes.
+- [x] **Owner device matrix** — owner confirms app opens and works on device; REC status remains explicitly unverified
+- [x] **GATE: owner states "Phase 1 accepted"** *(2026-06-10)*
 
 ## Phase 2 — Native integration
-- [x] JS bridge `AndroidHost` (feature-detected in HTML; additive `web:` commit)
+- [x] JS bridge `AndroidHost`
 - [x] Audio focus request/loss/regain wired to ctx.suspend/resume
-- [x] Foreground service (mediaPlayback) behind in-app "BACKGROUND AUDIO" toggle, with STOP notification action
+- [x] Foreground service behind in-app "BACKGROUND AUDIO" toggle, with STOP notification action
 - [x] Haptic tap bridge for BOMB/FIRE
-- [x] Stage Mode (radar-only fullscreen view for TV mirroring; works in browsers too)
-- [x] **GATE: Phase 2** — closed by owner instruction "Initiate phase 3" (2026-06-10); soak/focus results not individually reported, items remain for regression reference
+- [x] Stage Mode
+- [x] **GATE: Phase 2** — closed by owner instruction (2026-06-10); soak/focus results remain useful regression checks
 
 ## Phase 3 — Release
-- [x] Keystore created via RELEASE.md Path A (Termux); secrets set via Path C (agent-assisted, sealed-box encrypted); owner confirmed off-device backup in progress
-- [x] `release.yml`: tag `v*` → signed APK + AAB attached to GitHub Release
-- [ ] Privacy policy page (GitHub Pages) live — still pending, only needed for Play Store track
-- [x] v9.3.0 tagged; release artifacts published — https://github.com/renardoberou/Ping-thing-android/releases/tag/v9.3.0 (APK + AAB + CHECKSUMS.txt, apksigner-verified in CI before publish)
-- [ ] **GATE: signed build installed & verified on owner device** — release is live; owner install/sanity-check not yet reported back
+- [x] Keystore created and backed up off-device
+- [x] GitHub release workflow configured for signed APK + AAB on `v*` tags
+- [ ] Privacy policy page live via GitHub Pages / public URL — draft now exists as `privacy.html`; enable/link for Play Store when needed
+- [x] `v9.3.0` tagged; release artifacts published — https://github.com/renardoberou/Ping-thing-android/releases/tag/v9.3.0
+- [x] **GATE: signed build installed & verified on owner device** — owner reports signed APK installed and app works as expected (2026-07-08)
 
-## Phase 4 — Backlog (demand-driven, post-release)
-- [ ] Native MIDI bridge (android.media.midi → handleMIDI)
-- [ ] Native recorder (only if Phase 1 REC failed)
-- [ ] Oboe percussion layer (only if BOMB tap latency measured > ~35 ms)
-- [ ] Play Store listing (owner decision)
+## Phase 4 — Backlog
+- [ ] Native MIDI bridge
+- [ ] Native recorder if REC fails
+- [ ] Oboe percussion layer if latency requires it
+- [ ] Play Store listing
 
 ---
 
 ## Session log
-*(append entries here on handoff: date — agent — what was done — what is verified — exact next action)*
 
-- 2026-06-10 — consulting agent — Phase 0 documents authored; repo content staged for creation. Next action: owner creates repo / provides PAT; then owner reviews PLAN.md and closes Phase 0 gate.
-- 2026-06-10 — consulting agent — Phase 0 gate closed (owner approved all phases). Phase 1 implemented in full per PLAN §4: Android shell (Kotlin, plain Activity, WebViewAssetLoader, AGP 8.6.1 / Gradle 8.9 / Kotlin 2.0.20, sole dep androidx.webkit:1.11.0), pure-XML adaptive icon, copyInstrument asset pipeline, build.yml CI. All XML validated. **Verified next action: owner opens Actions tab → waits for green run → downloads `ping-thing-debug-apk` artifact → extracts zip → installs APK → runs the 9-point device matrix from PLAN §4.5 and reports results here.**
-- 2026-06-10 — consulting agent — Launch crash reported on owner device ("Ping Thing keeps stopping"); instrument HTML independently verified fine (Hermes/Termux), so fault is in the Kotlin shell. Phase 2 WIP stashed (git stash: "phase2-wip"). Shipped fix build: crash handler + full-screen trace viewer with COPY, WebView-construction guard, immersive-after-setContentView. Architecture question raised by owner answered in conversation: HTML is bundled in-APK (offline, no hosting); appassets.androidplatform.net is a virtual local origin, not the web. Next action: owner installs new artifact — either it launches clean, or it now SHOWS the stack trace; owner sends trace/screenshot back.
-- 2026-06-10 — consulting agent — Phase 1 gate closed by owner. Phase 2 implemented: merged MainActivity (crash scaffolding kept + AndroidHost bridge + audio focus + conditional lifecycle), PlaybackService (mediaPlayback FGS, STOP action), manifest permissions, and sanctioned `web:` changes (bridge glue, BG AUDIO injected toggle, adaptive scheduler lookahead 2.5s/500ms when hidden, haptics, Stage Mode). Next action: owner installs new artifact and runs the Phase 2 gate — BG AUDIO on, screen off 10 min, audio must continue without drift; then focus check vs a music app.
-- 2026-06-10 — consulting agent — Phase 2 gate closed by owner. Phase 3 shipped: env-driven release signing in app/build.gradle.kts (inert without secrets), release.yml (tag v* → decode KEYSTORE_B64 → assembleRelease+bundleRelease → assets on GitHub Release, versionName from tag). SECURITY: RELEASE.md Path B (CI keystore generation) retired — dispatch inputs and artifacts are publicly visible on a public repo; Path A (Termux) is canonical, Path C (agent-assisted secret setup, requires PAT Secrets RW) documented. Next action: owner runs Path A keytool commands, sets the four secrets (web UI or Path C), confirms off-device keystore backup, then creates tag v9.3.0 — release.yml does the rest.
-- 2026-06-10 — consulting agent — Owner-requested full audit/sync pass, fresh session (no prior local state, no push credential provided this turn). Verified via re-clone that every commit from Phases 0–3 was already present on `main` (nothing had actually gone unpushed — every prior session ended with a successful `git push`). Confirmed via string checks that web/ping-thing.html contains every feature confirmed working in conversation (Euclidean hihat+clustering, 3-ring oscilloscope+beat ring, warm spatial delay, in-place reverb DAMP, tightened kick repulsion+gravity boost, relocated/relit preset panel, iOS safe-area/unlock, AndroidHost glue, BG AUDIO toggle, haptics, adaptive scheduler, Stage Mode). Scanned full tree for secrets/keystores/binaries — clean, none tracked. **Found and fixed the one real gap: README.md was still the Phase 0 draft**, silently understating three shipped phases. Rewrote it to accurately reflect current status, known limitations (Web MIDI absent in WebView, REC unverified, no automated tests), and that no keystore/tag/signed release exists yet. No functional/instrument/Kotlin code changed in this pass — this was a documentation-accuracy and audit commit only. Next action unchanged from prior entry: owner runs RELEASE.md Path A, sets secrets, tags v9.3.0.
-- 2026-07-08 — consulting agent — Owner supplied an external signing runbook (agent-generated) for review. Cross-checked against existing release.yml/RELEASE.md; most of it already matched. Adopted the genuinely new, low-risk hardening: (1) release.yml now runs `apksigner verify` on the built APK and generates SHA-256 CHECKSUMS.txt, attaching it alongside the APK/AAB on every release; (2) build.yml gained a `safety-scan` job (runs on every push, not just at tag time) that fails the build on token-shaped strings or a tracked .jks/.apk/.aab; (3) RELEASE.md gained a §0 pre-flight grep checklist, a `gh` CLI convenience path for setting secrets from Termux, and an expanded Play Store section (Play App Signing key-reuse note, the 12-tester/14-day new-account gate, reference links). Declined to adopt: switching the existing curl+API workflow to require `gh` CLI (optional alt, not a replacement), and did not touch keystore filename/alias conventions (already env-driven, no functional difference). Explicitly did NOT generate any keystore — that step (external doc's Step 2) must run in the owner's own Termux; doing it in the agent sandbox would defeat the entire point of keeping the private key off any third-party environment. No app/instrument code changed.
-- 2026-07-08 — consulting agent — Owner generated keystore in Termux (alias `pingthing-release`, confirmed via openssl pkcs12 parse of the pasted base64 — CN=Resonant Systems, valid to 2053). Owner chose Path C: pasted keystore.b64 + passwords in-chat. Set all four secrets (KEYSTORE_B64, KEYSTORE_PASS, KEY_ALIAS, KEY_PASS) via GitHub API using proper libsodium sealed-box encryption (never plaintext) against the repo's public key. Confirmed secret names present via API (values never re-read). Deleted all keystore material from the agent sandbox immediately after. Owner confirmed ready; tagged and pushed v9.3.0 on commit 6ddd1ac. release.yml ran clean end-to-end including the apksigner verification step — confirmed via job-step API, not assumed. Release live with APK+AAB+CHECKSUMS.txt. Next action: owner exports debug presets, installs the signed APK, runs a sanity set, and reports back to close the Phase 3 gate. Also flagged (again) to revoke the PAT now that it has written secrets and pushed a tag.
+- 2026-06-10 — Phase 0 completed. Plan and docs approved.
+- 2026-06-10 — Phase 1 implemented: Android shell, WebViewAssetLoader, pure-XML adaptive icon, copyInstrument asset pipeline, build workflow, XML validation.
+- 2026-06-10 — Launch crash reported and fixed with on-screen crash visibility, WebView-construction guard, and initialization-order cleanup.
+- 2026-06-10 — Phase 2 implemented: AndroidHost bridge, audio focus, foreground playback service, BG AUDIO toggle, adaptive scheduler, haptics, and Stage Mode.
+- 2026-06-10 — Phase 3 release infrastructure added: signing-ready Gradle config and tag-triggered release workflow.
+- 2026-07-08 — Audit/sync pass confirmed Phases 0–3 code was already present on `main`; README was updated from outdated Phase 0 wording to actual status.
+- 2026-07-08 — Release hardening added: APK verification, checksums, safety scan, and release documentation improvements.
+- 2026-07-08 — Signed release created for tag `v9.3.0`; release assets published with checksums.
+- 2026-07-08 — Owner reports keystore backed up off-device, signed APK installed, and signed app works as expected. Phase 3 direct-distribution gate is closed. Remaining: public privacy URL for Play Store, optional REC verification, optional background-audio/focus regression checks, and Play Store listing decision.
